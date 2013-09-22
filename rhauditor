@@ -1,0 +1,777 @@
+#!/bin/bash
+# Author : rukmono.erwan@gmail.com
+#
+# License : GPL v3.0
+# Change log : https://github.com/ajobondon/rhauditor
+# 
+# RedHat system auditing tool
+
+## rhauditor report file/folder
+## temporary report files will save under /tmp folder
+tmpreportfolder="/tmp/`hostname`-report"
+
+## System auditing command list
+sa1="date"
+sa2="dmesg"
+sa3="uname -a"
+sa4="runlevel"
+sa5="cat /etc/logrotate.conf"
+sa6="cat /etc/ntp.conf"
+sa7="cat /etc/sysconfig/ntpd"
+sa8="ntpq -p"
+sa9="ps afx"
+sa10="cat /etc/passwd"
+sa11="cat /etc/group"
+sa12="cat /etc/redhat-release"
+
+## Disk, partition and directories auditing
+dp1="cat /etc/fstab"
+dp2="df -ah"
+dp3="fdisk -l"
+dp4="ls -al /"
+dp5="ls -al /usr/*"
+dp6="ls -al /tmp"
+dp7="ls -al /var/*"
+dp8="ls -al /opt/*"
+dp9="ls -al /home/*"
+dp10="ls -al /mnt/*"
+
+## Network auditing
+na1="cat /etc/ssh/sshd_config"
+na2="ifconfig -a"
+na3="hostname"
+na4="route -n"
+na5="cat /etc/resolv.conf"
+na6="chkconfig --list"
+
+## Packages and repositories auditing
+pr1="yum grouplist"
+pr2="yum list"
+
+## Compiling auditing report 
+taretc="tar cjvf etc-`hostname`.tar.bz2 /etc"
+cpetc="cp etc-`hostname`.tar.bz2 `pwd`/etc-`hostname`-$servername.tar.bz2"
+finstep="tar cjvf `hostname`-Report.tar.bz2 $tmpreportfolder"
+cpreportfolder="cp $tmpreportfolder/`hostname`-Report.tar.bz2 `pwd`/`hostname`-Report.tar.bz2"
+sosreportool="sosreport --batch"
+cpsosreport="cp /tmp/sosreport-*.tar.bz2 `pwd`/sosreport-`hostname`.tar.bz2"
+pause="sleep 3"
+
+## All audit results will go to $tmpreportfolder
+testinforeport=$tmpreportfolder/test-info.txt
+testerid=$tmpreportfolder/tester-ID.txt
+datereport=$tmpreportfolder/date-report.txt
+dmesgrep=$tmpreportfolder/dmesg-error-report.txt
+fstabrep=$tmpreportfolder/fstab-report.txt
+mountrep=$tmpreportfolder/mount-point-report.txt
+filerep=$tmpreportfolder/file-system-report.txt
+pacgrouprep=$tmpreportfolder/packages-group-installed-report.txt
+installedrep=$tmpreportfolder/installed-packages.txt
+sshconfrep=$tmpreportfolder/sshd_config.txt
+startuprep=$tmpreportfolder/startup-services-report.txt
+logrotaterep=$tmpreportfolder/logrotate-report.txt
+ntprep=$tmpreportfolder/ntp-report.txt
+ntpdrep=$tmpreportfolder/ntpd-report.txt
+repolistrep=$tmpreportfolder/repo-list-report.txt
+localreporep=$tmpreportfolder/local-repo-report.txt
+userlistrep=$tmpreportfolder/users-list-report.txt
+grouplistrep=$tmpreportfolder/group-list-report.txt
+resolvrep=$tmpreportfolder/resolv.conf-report.txt
+roothomerep=$tmpreportfolder/ls-alroot.txt
+usrrep=$tmpreportfolder/ls-al-usr.txt
+tmprep=$tmpreportfolder/ls-al-tmp.txt
+varep=$tmpreportfolder/ls-al-var.txt
+optrep=$tmpreportfolder/ls-al-opt.txt
+oraclerep=$tmpreportfolder/ls-al-Oracle_binaries.txt
+u18rep=$tmpreportfolder/ls-al-u18.txt
+userhomerep=$tmpreportfolder/ls-al-home.txt
+logarchrep=$tmpreportfolder/ls-al-logarchieve.txt
+mntrep=$tmpreportfolder/ls-al-mnt.txt
+agprep=$tmpreportfolder/ls-al-agp.txt
+runlevelrep=$tmpreportfolder/default-runlevel.txt
+svriprep=$tmpreportfolder/server-ip-report.txt
+hostnamerep=$tmpreportfolder/server-hostname-report.txt
+sysconfnetrep=$tmpreportfolder/sysconfig-network-file.txt
+defrouterep=$tmpreportfolder/default-routing.txt
+kernelrep=$tmpreportfolder/kernel-report.txt
+redhatrep=$tmpreportfolder/redhat-release.txt
+ntpqrep=$tmpreportfolder/ntpq-output-report.txt
+bgprosrep=$tmpreportfolder/background-process-report.txt
+
+## Got root?
+if [ "$(id -u)" != "0" ]; then
+   echo "Ups... Please login to user root first." 1>&2
+   exit 1
+fi
+
+## Checking report folder 
+if [ -d "$tmpreportfolder" ]; then
+        rm -rf $tmpreportfolder
+	else
+	mkdir $tmpreportfolder	
+fi
+
+## rhauditor help 
+rhauditorhelp()
+{
+cat << EOF
+
+	Auditing scenarios :
+
+	1. System auditing.
+	2. Disk, partition and directories auditing.
+	3. Network auditing.
+	4. Packages and repository auditing.
+
+	-h		Show help message.
+	-a		Use all auditing scenarios.
+	-s <number>	Choose auditing scenario. Ex, if you write "-s 1" (without quotes) it will run scenario number 1 
+	-o		With sosreport tool. Default not using sosreport tool for further analysis 
+
+	example, 
+		rhaudit -s 1 	: Running scenario number 1
+		rhaudit -s -o	: Running scenario number 1 and sosreport tool
+		rhaudit -a	: Running all scenarios
+		rhaudit -o	: Only running sosreport
+
+EOF
+}
+
+## First menu
+firstmenu()
+{
+clear
+tput cup 1 20;echo -n "Your name : ";read testername
+echo "Tester name : $testername" > $testinforeport
+tput cup 2 20;echo -n "Server : ";read servername
+echo "Server : $servername" > $testerid
+
+## final report file. 
+finalreportfile="`pwd`/FINAL-$servername-REPORTED-by-$testername.txt"
+
+## Write to final report file
+cat $testinforeport > $finalreportfile 
+cat $testerid >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+}
+
+## Second menu. Start auditing process
+secondmenu()
+{
+clear
+tput cup 1 20;echo -e "Have a nice day $testername  :)\n"
+tput cup 2 20;echo -e "UAT Date: `date`\n"
+tput cup 6 20;echo -e "Start auditing process. Please wait..."
+}
+
+## System auditing scenario function
+systemauditing()
+{
+## Running secondmenu function
+secondmenu
+
+## Check server date and time
+clear
+tput cup 1 20;echo -e "Check date and time"
+echo "Command : date" > $datereport 
+echo "Output  : " >> $datereport 
+echo " " >> $datereport 
+$sa1 >> $datereport 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $datereport >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check error message from dmesg 
+clear
+tput cup 1 20;echo -e "Check ERROR in DMESG \n"
+echo "Command : dmesg | grep -i ERROR" > $dmesgrep 
+echo "Output  : " >> $dmesgrep
+echo " " >> $dmesgrep
+$sa2 | grep -i ERROR >> $dmesgrep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $dmesgrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check kernel version 
+clear
+tput cup 1 20;echo -e "Check kernel version \n" 
+echo "Command : $sa3" > $kernelrep
+echo "Output  : " >> $kernelrep
+echo " " >> $kernelrep
+$sa3 >> $kernelrep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $kernelrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check runlevel 
+clear
+tput cup 1 20;echo -e "Check runlevel \n" 
+echo "Command : $sa4" > $runlevelrep
+echo "Output  : " >> $runlevelrep
+echo " " >> $runlevelrep
+$sa4 >> $runlevelrep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $runlevelrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check logrotate configuration 
+clear
+tput cup 1 20;echo -e "Check logrotate configuration \n" 
+echo "Command : $sa5" > $logrotaterep
+echo "Output  : " >> $logrotaterep
+echo " " >> $logrotaterep
+$sa5 >> $logrotaterep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $logrotaterep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check ntp client configuration 
+clear
+tput cup 1 20;echo -e "Check NTP configuration \n" 
+echo "Command : $sa6" > $ntprep 
+echo "Output  : " >> $ntprep
+echo " " >> $ntprep 
+$sa6 >> $ntprep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $ntprep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+echo "Command : $sa7" > $ntpdrep
+echo "Output  : " >> $ntpdrep
+echo " " >> $ntpdrep
+$sa7 >> $ntpdrep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $ntpdrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+echo "Command : $sa8" > $ntpqrep
+echo "Output  : " >> $ntpqrep
+echo " " >> $ntpqrep
+$sa8 >> $ntpqrep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $ntpqrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check running background process 
+clear
+tput cup 1 20;echo -e "Check running background process \n" 
+echo "Command : $sa9" > $bgprosrep
+echo "Output  : " >> $bgprosrep
+echo " " >> $bgprosrep
+$sa9 >> $bgprosrep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $bgprosrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check users and groups 
+clear
+tput cup 1 20;echo -e "Check users and groups"
+echo "Command : $sa10" > $userlistrep 
+echo "Output  : " >> $userlistrep 
+echo " " >> $userlistrep
+$sa10 >> $userlistrep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $userlistrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+echo "Command : $sa11" > $grouplistrep 
+echo "Output  : " >> $grouplistrep 
+echo " " >> $grouplistrep
+$sa11 >> $grouplistrep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $grouplistrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check redhat version 
+clear
+tput cup 1 20;echo -e "Check redhat version \n" 
+echo "Command : $sa12" > $redhatrep
+echo "Output  : " >> $redhatrep
+echo " " >> $redhatrep
+$sa12 >> $redhatrep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $redhatrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+}
+
+## Disk and partition auditing scenario function
+diskpartauditing()
+{
+## Running secondmenu function
+secondmenu
+
+## Check fstab file 
+clear
+tput cup 1 20;echo -e "Check fstab file \n" 
+echo "Command : $dp1" > $fstabrep
+echo "Output  : " >> $fstabrep
+echo " " >> $fstabrep
+$dp1 >> $fstabrep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $fstabrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check disk usage 
+clear
+tput cup 1 20;echo -e "Check disk usage \n" 
+echo "Command : $dp2" > $mountrep 
+echo "Output  : " >> $mountrep
+echo " " >> $mountrep
+$dp2 >> $mountrep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $mountrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check partition table 
+clear
+tput cup 1 20;echo -e "Check partition table \n" 
+echo "Command : $dp3" > $filerep 
+echo "Output  : " >> $filerep
+echo " " >> $filerep
+$dp3 >> $filerep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $filerep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check directories permission 
+clear
+tput cup 1 20;echo -e " Check directories permission"
+echo "Command : $dp4" > $roothomerep 
+echo "Output  : " >> $roothomerep
+echo " " >> $roothomerep
+$dp4 >> $roothomerep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $roothomerep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+echo "Command : $dp5" > $usrrep 
+echo "Output  : " >> $usrrep
+echo " " >> $usrrep
+$dp5 >> $usrrep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $usrrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+echo "Command : $dp6" > $tmprep
+echo "Output  : " >> $tmprep
+echo " " >> $tmprep
+$dp6 >> $tmprep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $tmprep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+echo "Command : $dp7" > $varep 
+echo "Output  : " >> $varep
+echo " " >> $varep 
+$dp7 >> $varep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $varep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+echo "Command : $dp8" > $optrep 
+echo "Output  : " >> $optrep
+echo " " >> $optrep
+$dp8 >> $optrep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $optrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+echo "Command : $dp9" > $userhomerep 
+echo "Output  : " >> $userhomerep
+echo " " >> $userhomerep
+$dp9 >> $userhomerep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $userhomerep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+echo "Command : $dp10" > $mntrep
+echo "Output  : " >> $mntrep
+echo " " >> $mntrep
+$dp10 >> $mntrep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $mntrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+}
+
+## Network auditing scenario function
+networkauditing()
+{
+## Running secondmenu function
+secondmenu
+
+## Check sshd configuration file 
+clear
+tput cup 1 20;echo -e "Check openssh server configuration file \n" 
+echo "Command : $na1" > $sshconfrep 
+echo "Output  : " >> $sshconfrep
+echo " " >> $sshconfrep
+$na1 >> $sshconfrep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $sshconfrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check server IP 
+clear
+tput cup 1 20;echo -e "Check server IP \n" 
+echo "Command : $na2" > $svriprep 
+echo "Output  : " >> $svriprep
+echo " " >> $svriprep 
+$na2 >> $svriprep
+## backup ip configuration files
+mkdir -p $tmpreportfolder/network-scripts
+cp -a /etc/sysconfig/network-scripts/ifcfg-* $tmpreportfolder/network-scripts/
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $svriprep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check hostname 
+clear
+tput cup 1 20;echo -e "Check hostname server \n" 
+echo "Command : $na3" > $hostnamerep 
+echo "Output  : " >> $hostnamerep
+echo " " >> $hostnamegrep
+hostname >> $hostnamerep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $hostnamerep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check server routing 
+clear
+tput cup 1 20;echo -e "Check routing \n" 
+echo "Command : $na4" > $defrouterep
+echo "Output  : " >> $defrouterep
+echo " " >> $defrouterep
+$na4 >> $defrouterep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $defrouterep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check nameserver configuration 
+clear
+tput cup 1 20;echo -e "Check nameserver configuration \n" 
+echo "Command : $na5" > $resolvrep 
+echo "Output  : " >> $resolvrep 
+echo " " >> $resolvrep
+$na5 >> $resolvrep 
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $resolvrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check services startup 
+clear
+tput cup 1 20;echo -e "Check startup services $sa4 \n" 
+echo "Command : $na6" > $startuprep 
+echo "Output  : " >> $startuprep 
+echo " " >> $startuprep
+$na6 >> $startuprep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $startuprep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+}
+
+## Packages and repositories auditing scenario function
+packrepoauditing()
+{
+## Running secondmenu function
+secondmenu
+
+## Check packages group installed 
+clear
+tput cup 1 20;echo -e "Check packages group installed \n" 
+echo "Command : $pr1" > $pacgrouprep 
+echo "Output  : " >> $pacgrouprep 
+echo " " >> $pacgrouprep
+$pr1 >> $pacgrouprep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $pacgrouprep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+## Check installed packages 
+clear
+tput cup 1 20;echo -e "Check installed packages \n" 
+echo "Command : $pr2" > $installedrep
+echo "Output  : " >> $installedrep
+echo " " >> $installedrep
+$pr2 >> $installedrep
+
+## Write to final report file
+echo " " >> $finalreportfile
+cat $installedrep >> $finalreportfile
+echo " " >> $finalreportfile
+echo "------------------------------------------------------------------------------" >> $finalreportfile
+
+tput cup 16 20;echo -e "... Please wait ..."
+$pause
+
+}
+
+## sosreport tool scenario function
+sosreportaudit()
+{
+## Running secondmenu function
+secondmenu
+
+## sosreport for detail report
+clear
+tput cup 1 20;echo -e "Running SOSREPORT command for detail report"
+tput cup 2 20;echo -e "Please wait..."
+$sosreportool
+$cpsosreport
+
+## manual etc folder backup
+clear
+tput cup 1 20;echo -e "Backup etc folder"
+cd $tmpreportfolder
+$taretc
+$cpetc
+cd -
+}
+
+## Compress report folder and copy it to user folder 
+compressreportfolder()
+{
+clear
+tput cup 1 20;echo -e "Compress $tmpreportfolder"
+cd $tmpreportfolder
+$finstep
+$cpreportfolder
+cd -
+}
+
+## See ya.... 
+endmenu()
+{
+clear
+tput cup 10 20;echo -e "Thank you $testername"
+tput cup 11 20;echo -e "You can find all auditing result file in \033[38;5;1m`pwd`/$finalreportfile\033[39m and \033[38;5;1m`pwd`/`hostname`-$dnn-$testername-Report.tar.bz2\033[39m tarball. Please copy all that files and folder to other media (flash disk, laptop or pc) for your report."
+tput cup 21 20;read -p "See ya..."
+}
+
+## Running secondmenu function
+## Auditing process
+while getopts "has:o" auditprocess; do
+	case $auditprocess in
+		h) 
+			rhauditorhelp
+			;;
+
+		s)
+			scenarios=$OPTARG
+			;;
+
+		a)
+			firstmenu
+			secondmenu
+			systemauditing
+			diskpartauditing
+			networkauditing
+			packrepoauditing
+			compressreportfolder
+			endmenu
+			;;
+
+		o)
+			sosreportaudit
+			compressreportfolder
+			;;
+
+		*)
+			rhauditorhelp
+			exit;;
+	esac
+done
+
+## If no options/flags were given, will show rhauditor help
+if [ -z "$1" ]; then
+	rhauditorhelp	
+	exit
+fi
+
+## Running scenario number 1 - System auditing 
+if [[ $scenarios == "1" ]]; then
+	   firstmenu
+	   secondmenu
+	   systemauditing
+	   compressreportfolder
+	   endmenu
+	   exit 
+fi
+
+## Running scenario number 2 - Disk, partition and directories auditing 
+if [[ $scenarios == "2" ]]; then
+	   firstmenu
+	   secondmenu
+	   diskpartauditing 
+	   compressreportfolder
+	   endmenu
+	   exit 
+fi
+
+## Running scenario number 3 - Network auditing 
+if [[ $scenarios == "3" ]]; then
+	   firstmenu
+	   secondmenu
+	   networkauditing
+	   compressreportfolder
+	   endmenu
+	   exit 
+fi
+
+## Running scenario number 4 - Packages and repositories auditing 
+if [[ $scenarios == "4" ]]; then
+	   firstmenu
+	   secondmenu
+	   packrepoauditing 
+	   compressreportfolder
+	   endmenu
+	   exit 
+fi
